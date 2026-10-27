@@ -3,6 +3,7 @@ CXX=g++
 
 LIBNAME=libdmtcp_cuda
 LIBOBJS = cuda-ckpt.o
+VMM_LIB=libvmm_ckpt.so
 
 DMTCP_INCLUDE_FLAGS=-I$(DMTCP_ROOT)/include -I$(DMTCP_ROOT)/jalib -I$(DMTCP_ROOT)/src
 
@@ -45,6 +46,26 @@ check: ${LIBNAME}.so tests
 ${LIBNAME}.so: ${LIBOBJS}
 	${LINK} -shared -fPIC -o $@ $^ -lcuda -ldl
 
+# VMM proof of concept; does not need DMTCP.
+${VMM_LIB}: vmm-ckpt.cpp vmm-ckpt.h
+	${CXX} -g3 -O0 -fPIC -shared $(CUDA_INCLUDE_FLAGS) -o $@ vmm-ckpt.cpp \
+	  -L$(CUDA_HOME)/lib64 -lcuda -lcudart -ldl
+
+vmm: ${VMM_LIB}
+	cd test && $(MAKE) vmm_poc
+
+check-assumptions:
+	cd test && $(MAKE) vmm_assumptions
+	./test/vmm_assumptions
+
+check-vmm: vmm
+	@rm -f vmm-ckpt-*.img
+	LD_PRELOAD=$$PWD/${VMM_LIB} ./test/vmm_poc --ckpt-at 3 --image vmm-ckpt-1.img
+	LD_PRELOAD=$$PWD/${VMM_LIB} ./test/vmm_poc --restart vmm-ckpt-1.img \
+	  --ckpt-at 6 --image vmm-ckpt-2.img
+	LD_PRELOAD=$$PWD/${VMM_LIB} ./test/vmm_poc --restart vmm-ckpt-2.img
+	@rm -f vmm-ckpt-*.img
+
 .c.o:
 	${CC} ${CFLAGS} -c -o $@ $<
 .cpp.o:
@@ -57,7 +78,7 @@ tidy:
 	rm -f *~ .*.swp dmtcp_restart_script*.sh ckpt_*.dmtcp
 
 clean: tidy
-	rm -f ${LIBOBJS} ${LIBNAME}.so
+	rm -f ${LIBOBJS} ${LIBNAME}.so ${VMM_LIB} vmm-ckpt-*.img
 	cd test && $(MAKE) clean
 
 distclean: clean
@@ -68,4 +89,4 @@ dist: distclean
 	  tar czvf $$dir.tar.gz --exclude-vcs ./$$dir
 	dir=`basename $$PWD`; ls -l ../$$dir.tar.gz
 
-.PHONY: default check tests tidy clean distclean dist
+.PHONY: default check vmm check-vmm check-assumptions tests tidy clean distclean dist

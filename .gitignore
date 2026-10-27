@@ -4,3 +4,4 @@
 *.dmtcp
 ckpt_rank_*/
 dmtcp_restart_script*
+vmm-ckpt*.img
